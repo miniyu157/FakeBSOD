@@ -17,6 +17,7 @@ namespace FakeBSOD
 
     public interface ILanguageProvider
     {
+        string SadFace { get; }
         string FontName { get; }
         string MainText { get; }
         string SupportText { get; }
@@ -25,6 +26,8 @@ namespace FakeBSOD
 
     public class ChineseLanguageProvider : ILanguageProvider
     {
+        public string SadFace { get { return ":("; } }
+
         public string FontName { get { return "Microsoft YaHei"; } }
 
         public string MainText { get { return "你的电脑遇到问题，需要重新启动。\n我们只收集某些错误信息，然后为你重新启动。"; } }
@@ -39,6 +42,8 @@ namespace FakeBSOD
 
     public class EnglishLanguageProvider : ILanguageProvider
     {
+        public string SadFace { get { return ":("; } }
+
         public string FontName { get { return "Segoe UI"; } }
 
         public string MainText { get { return "Your PC ran into a problem and needs to restart.\nWe're just collecting some error info, and then we'll restart for you."; } }
@@ -466,7 +471,7 @@ namespace FakeBSOD
                 {
                     using (Font sadFont = new Font("Segoe UI", 110f * scale))
                     {
-                        e.Graphics.DrawString(":(", sadFont, textBrush, leftMargin - (int)(15 * scale), topMargin);
+                        e.Graphics.DrawString(langProvider.SadFace, sadFont, textBrush, leftMargin - (int)(15 * scale), topMargin);
                     }
 
                     using (Font mainFont = new Font(langProvider.FontName, 24f * scale))
