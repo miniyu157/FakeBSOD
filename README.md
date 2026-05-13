@@ -2,10 +2,8 @@
 
 终极高仿真 Windows 蓝屏恶作剧。
 
-**毫不妥协的硬件级欺骗。**  
 多屏幕、全局钩子、强制静音、伪二维码、自适应语言、弹出设备提示音。  
 源码约 500 行（拆分为 3 个 .cs 文件），C#4.0，不依赖第三方库。  
-适合炫技、教学、减压。
 
 <img src="./assets/preview.png" width="49%" /> <img src="./assets/preview-2.png" width="49%" />
 
@@ -38,15 +36,13 @@
 
 ## 快速开始
 
-### 编译（零依赖）
+### 编译
 
 在 Windows 命令提示符中，使用 .NET Framework 内置编译器：
 
 ```cmd
 C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /out:FakeBSOD.exe *.cs
 ```
-
-无需 Visual Studio，无需 NuGet 还原。
 
 ### 运行
 
