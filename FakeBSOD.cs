@@ -1,81 +1,12 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
 namespace FakeBSOD
 {
-    public enum LanguageOption
-    {
-        Auto,
-        Zh,
-        En
-    }
-
-    public interface ILanguageProvider
-    {
-        string SadFace { get; }
-        string FontName { get; }
-        string MainText { get; }
-        string SupportText { get; }
-        string FormatProgress(int progress);
-    }
-
-    public class ChineseLanguageProvider : ILanguageProvider
-    {
-        public string SadFace { get { return ":("; } }
-
-        public string FontName { get { return "Microsoft YaHei"; } }
-
-        public string MainText { get { return "你的电脑遇到问题，需要重新启动。\n我们只收集某些错误信息，然后为你重新启动。"; } }
-
-        public string SupportText { get { return "有关此问题和可能的解决方法的详细信息，请访问 https://www.windows.com/stopcode\n\n如果致电支持人员，请向他们提供以下信息:\n终止代码: CRITICAL_PROCESS_DIED"; } }
-
-        public string FormatProgress(int progress)
-        {
-            return string.Format("完成 {0}%", progress);
-        }
-    }
-
-    public class EnglishLanguageProvider : ILanguageProvider
-    {
-        public string SadFace { get { return ":("; } }
-
-        public string FontName { get { return "Segoe UI"; } }
-
-        public string MainText { get { return "Your PC ran into a problem and needs to restart.\nWe're just collecting some error info, and then we'll restart for you."; } }
-
-        public string SupportText { get { return "For more information about this issue and possible fixes, visit https://www.windows.com/stopcode\n\nIf you call a support person, give them this info:\nStop code: CRITICAL_PROCESS_DIED"; } }
-
-        public string FormatProgress(int progress)
-        {
-            return string.Format("{0}% complete", progress);
-        }
-    }
-
-    public static class LanguageFactory
-    {
-        public static ILanguageProvider GetProvider(LanguageOption option)
-        {
-            if (option == LanguageOption.Zh)
-            {
-                return new ChineseLanguageProvider();
-            }
-            if (option == LanguageOption.En)
-            {
-                return new EnglishLanguageProvider();
-            }
-            if (CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase))
-            {
-                return new ChineseLanguageProvider();
-            }
-            return new EnglishLanguageProvider();
-        }
-    }
-
     [ComImport]
     [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -119,19 +50,6 @@ namespace FakeBSOD
 
     public class MainForm : Form
     {
-        public static LanguageOption TargetLanguage = LanguageOption.Auto;
-        public const float BaseHeight = 1080f;
-        public const double LeftMarginRatio = 0.107708;
-        public const double TopMarginRatio = 0.094074;
-        public static readonly Color BackgroundColor = Color.FromArgb(0, 120, 215);
-        public static readonly Color TextColor = Color.White;
-        public const int InitialDelayMs = 2000;
-        public const int TimerIntervalMs = 8000;
-        public const int ProgressIntervalMs = 3000;
-        public const int ExitDelayMs = 3500;
-        public const int ProgressMinIncrement = 4;
-        public const int ProgressMaxIncrement = 15;
-
         [DllImport("user32.dll")]
         public static extern bool SetProcessDPIAware();
 
@@ -184,7 +102,7 @@ namespace FakeBSOD
         public static void Main()
         {
             SetProcessDPIAware();
-            Thread.Sleep(InitialDelayMs);
+            Thread.Sleep(AppConfig.InitialDelayMs);
 
             proc = HookCallback;
             hookID = SetHook(proc);
@@ -247,7 +165,7 @@ namespace FakeBSOD
             if (this.isPrimaryScreen)
             {
                 timer = new System.Windows.Forms.Timer();
-                timer.Interval = TimerIntervalMs;
+                timer.Interval = AppConfig.TimerIntervalMs;
                 timer.Tick += Timer_Tick;
                 timer.Start();
             }
@@ -332,12 +250,12 @@ namespace FakeBSOD
 
             if (isPrimaryScreen)
             {
-                this.BackColor = BackgroundColor;
-                langProvider = LanguageFactory.GetProvider(TargetLanguage);
+                this.BackColor = AppConfig.BackgroundColor;
+                langProvider = LanguageFactory.GetProvider(AppConfig.TargetLanguage);
                 showBsod = true;
 
                 progressTimer = new System.Windows.Forms.Timer();
-                progressTimer.Interval = ProgressIntervalMs;
+                progressTimer.Interval = AppConfig.ProgressIntervalMs;
                 progressTimer.Tick += ProgressTimer_Tick;
                 progressTimer.Start();
             }
@@ -355,8 +273,8 @@ namespace FakeBSOD
             Bitmap bmp = new Bitmap(modules, modules);
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                g.Clear(TextColor);
-                using (SolidBrush b = new SolidBrush(BackgroundColor))
+                g.Clear(AppConfig.TextColor);
+                using (SolidBrush b = new SolidBrush(AppConfig.BackgroundColor))
                 {
                     Random rnd = new Random(1024);
                     for (int i = 2; i < 27; i++)
@@ -394,7 +312,7 @@ namespace FakeBSOD
 
         private void DrawFinder(Graphics g, Brush b, int x, int y)
         {
-            using (Brush w = new SolidBrush(TextColor))
+            using (Brush w = new SolidBrush(AppConfig.TextColor))
             {
                 g.FillRectangle(b, x, y, 7, 7);
                 g.FillRectangle(w, x + 1, y + 1, 5, 5);
@@ -404,7 +322,7 @@ namespace FakeBSOD
 
         private void DrawAlignment(Graphics g, Brush b, int x, int y)
         {
-            using (Brush w = new SolidBrush(TextColor))
+            using (Brush w = new SolidBrush(AppConfig.TextColor))
             {
                 g.FillRectangle(b, x, y, 5, 5);
                 g.FillRectangle(w, x + 1, y + 1, 3, 3);
@@ -415,14 +333,14 @@ namespace FakeBSOD
         private void ProgressTimer_Tick(object sender, EventArgs e)
         {
             Random rnd = new Random();
-            currentProgress += rnd.Next(ProgressMinIncrement, ProgressMaxIncrement + 1);
+            currentProgress += rnd.Next(AppConfig.ProgressMinIncrement, AppConfig.ProgressMaxIncrement + 1);
             if (currentProgress >= 100)
             {
                 currentProgress = 100;
                 progressTimer.Stop();
 
                 System.Windows.Forms.Timer exitTimer = new System.Windows.Forms.Timer();
-                exitTimer.Interval = ExitDelayMs;
+                exitTimer.Interval = AppConfig.ExitDelayMs;
                 exitTimer.Tick += ExitTimer_Tick;
                 exitTimer.Start();
             }
@@ -463,11 +381,11 @@ namespace FakeBSOD
             {
                 int sw = this.ClientSize.Width;
                 int sh = this.ClientSize.Height;
-                float scale = sh / BaseHeight;
-                int leftMargin = (int)(sw * LeftMarginRatio);
-                int topMargin = (int)(sh * TopMarginRatio);
+                float scale = sh / AppConfig.BaseHeight;
+                int leftMargin = (int)(sw * AppConfig.LeftMarginRatio);
+                int topMargin = (int)(sh * AppConfig.TopMarginRatio);
 
-                using (SolidBrush textBrush = new SolidBrush(TextColor))
+                using (SolidBrush textBrush = new SolidBrush(AppConfig.TextColor))
                 {
                     using (Font sadFont = new Font("Segoe UI", 110f * scale))
                     {
@@ -476,12 +394,12 @@ namespace FakeBSOD
 
                     using (Font mainFont = new Font(langProvider.FontName, 24f * scale))
                     {
-                        e.Graphics.DrawString(langProvider.MainText, mainFont, textBrush, leftMargin, (int)(sh * (TopMarginRatio + 0.28)));
-                        e.Graphics.DrawString(langProvider.FormatProgress(currentProgress), mainFont, textBrush, leftMargin, (int)(sh * (TopMarginRatio + 0.41)));
+                        e.Graphics.DrawString(langProvider.MainText, mainFont, textBrush, leftMargin, (int)(sh * (AppConfig.TopMarginRatio + 0.28)));
+                        e.Graphics.DrawString(langProvider.FormatProgress(currentProgress), mainFont, textBrush, leftMargin, (int)(sh * (AppConfig.TopMarginRatio + 0.41)));
                     }
 
                     int qrSize = (int)(116f * scale);
-                    int qrY = (int)(sh * (TopMarginRatio + 0.50));
+                    int qrY = (int)(sh * (AppConfig.TopMarginRatio + 0.50));
 
                     if (qrCodeCache == null)
                     {
