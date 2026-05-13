@@ -4,8 +4,10 @@
 
 **毫不妥协的硬件级欺骗。**  
 多屏幕、全局钩子、强制静音、伪二维码、自适应语言、弹出设备提示音。  
-源码约 500 行，C#4.0，不依赖第三方库。  
+源码约 500 行（拆分为 3 个 .cs 文件），C#4.0，不依赖第三方库。  
 适合炫技、教学、减压。
+
+<img src="./assets/preview.png" width="49%" /> <img src="./assets/preview-2.png" width="49%" />
 
 ---
 
@@ -36,12 +38,12 @@
 
 ## 快速开始
 
-### 编译（单文件，零依赖）
+### 编译（零依赖）
 
 在 Windows 命令提示符中，使用 .NET Framework 内置编译器：
 
 ```cmd
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /out:FakeBSOD.exe FakeBSOD.cs
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /out:FakeBSOD.exe *.cs
 ```
 
 无需 Visual Studio，无需 NuGet 还原。
@@ -66,7 +68,7 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /out:Fake
 
 ### 切换语言
 
-修改 `MainForm.TargetLanguage` 静态字段即可强制指定语言：
+修改 `AppConfig.cs` 中的 `TargetLanguage` 字段即可强制指定语言：
 
 ```csharp
 public static LanguageOption TargetLanguage = LanguageOption.Zh; // 中文
@@ -75,7 +77,7 @@ public static LanguageOption TargetLanguage = LanguageOption.Zh; // 中文
 
 ### 修改配色
 
-`MainForm` 中的两个公共颜色常量可以直接替换：
+`AppConfig.cs` 中的两个公共颜色常量可以直接替换：
 
 ```csharp
 public static readonly Color BackgroundColor = Color.FromArgb(0, 120, 215); // BSOD 蓝色
@@ -86,7 +88,7 @@ public static readonly Color TextColor = Color.White;
 
 ### 调整时序
 
-在 `MainForm` 顶部，可直接修改并重新编译：
+在 `AppConfig.cs` 中，可直接修改并重新编译：
 
 - `InitialDelayMs`：启动到蓝屏的等待时间
 - `ProgressIntervalMs`：进度刷新间隔
