@@ -7,6 +7,10 @@ using System.Windows.Forms;
 
 namespace FakeBSOD
 {
+    // ========================================================================
+    // COM Interfaces for Core Audio API
+    // ========================================================================
+
     [ComImport]
     [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -48,26 +52,27 @@ namespace FakeBSOD
     [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
     public class MMDeviceEnumeratorComObject { }
 
-    public class MainForm : Form
-    {
-        [DllImport("user32.dll")]
-        public static extern bool SetProcessDPIAware();
+    // ========================================================================
+    // Keyboard Hook Infrastructure
+    // ========================================================================
 
+    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KBDLLHOOKSTRUCT
+    {
+        public uint vkCode;
+        public uint scanCode;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    public static class KeyboardHookManager
+    {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_SYSKEYDOWN = 0x0104;
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct KBDLLHOOKSTRUCT
-        {
-            public uint vkCode;
-            public uint scanCode;
-            public uint flags;
-            public uint time;
-            public IntPtr dwExtraInfo;
-        }
-
-        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
@@ -82,96 +87,7 @@ namespace FakeBSOD
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
 
-        private System.Windows.Forms.Timer timer;
-        private System.Windows.Forms.Timer progressTimer;
-        private Bitmap screenCapture;
-        private static LowLevelKeyboardProc proc;
-        private static IntPtr hookID = IntPtr.Zero;
-
-        private int currentProgress = 0;
-        private ILanguageProvider langProvider;
-        private bool showBsod = false;
-        private Bitmap qrCodeCache = null;
-
-        public static bool isMuted = false;
-        public static bool originalMuteState = false;
-        public static IAudioEndpointVolume volume = null;
-        private bool isPrimaryScreen;
-
-        [STAThread]
-        public static void Main()
-        {
-            SetProcessDPIAware();
-            Thread.Sleep(AppConfig.InitialDelayMs);
-
-            proc = HookCallback;
-            hookID = SetHook(proc);
-
-            MainForm firstForm = null;
-            foreach (Screen screen in Screen.AllScreens)
-            {
-                MainForm form = new MainForm(screen, screen.Primary);
-                if (firstForm == null)
-                {
-                    firstForm = form;
-                }
-                else
-                {
-                    form.Show();
-                }
-            }
-
-            if (firstForm != null)
-            {
-                Application.Run(firstForm);
-            }
-
-            if (volume != null)
-            {
-                try
-                {
-                    volume.SetMute(originalMuteState, Guid.Empty);
-                }
-                catch { }
-            }
-
-            if (hookID != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(hookID);
-                hookID = IntPtr.Zero;
-            }
-        }
-
-        public MainForm(Screen screen, bool isPrimary)
-        {
-            this.isPrimaryScreen = isPrimary;
-            this.DoubleBuffered = true;
-            Rectangle bounds = screen.Bounds;
-            this.StartPosition = FormStartPosition.Manual;
-            this.Bounds = bounds;
-
-            screenCapture = new Bitmap(bounds.Width, bounds.Height);
-            using (Graphics g = Graphics.FromImage(screenCapture))
-            {
-                g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
-            }
-
-            this.FormBorderStyle = FormBorderStyle.None;
-            this.TopMost = true;
-            this.ShowInTaskbar = false;
-            this.KeyPreview = true;
-            this.Cursor = Cursors.WaitCursor;
-
-            if (this.isPrimaryScreen)
-            {
-                timer = new System.Windows.Forms.Timer();
-                timer.Interval = AppConfig.TimerIntervalMs;
-                timer.Tick += Timer_Tick;
-                timer.Start();
-            }
-        }
-
-        private static IntPtr SetHook(LowLevelKeyboardProc proc)
+        public static IntPtr Install(LowLevelKeyboardProc proc)
         {
             using (Process curProcess = Process.GetCurrentProcess())
             using (ProcessModule curModule = curProcess.MainModule)
@@ -180,7 +96,13 @@ namespace FakeBSOD
             }
         }
 
-        private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        public static void Uninstall(IntPtr hook)
+        {
+            if (hook != IntPtr.Zero)
+                UnhookWindowsHookEx(hook);
+        }
+
+        public static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
@@ -189,83 +111,117 @@ namespace FakeBSOD
                 bool altDown = (kbdStruct.flags & 0x20) != 0;
 
                 if (vkCode == 0x5B || vkCode == 0x5C) return (IntPtr)1;
-                if (vkCode == 0x09 && altDown) return (IntPtr)1;
-                if (vkCode == 0x1B && altDown) return (IntPtr)1;
+                if (vkCode == 0x09 && altDown)        return (IntPtr)1;
+                if (vkCode == 0x1B && altDown)        return (IntPtr)1;
                 if (vkCode == 0x1B && (Control.ModifierKeys & Keys.Control) == Keys.Control) return (IntPtr)1;
-                if (vkCode == 0x73 && altDown) return (IntPtr)1;
+                if (vkCode == 0x73 && altDown)        return (IntPtr)1;
             }
-            return CallNextHookEx(hookID, nCode, wParam, lParam);
+            return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+        }
+    }
+
+    // ========================================================================
+    // MainForm — pure rendering surface, no timer/orchestration logic
+    // ========================================================================
+
+    public class MainForm : Form
+    {
+        [DllImport("user32.dll")]
+        public static extern bool SetProcessDPIAware();
+
+        public bool IsPrimaryScreen { get; private set; }
+        public Bitmap ScreenCapture { get; set; }
+        public bool ShowBsod { get; set; }
+        public ILanguageProvider LanguageProvider { get; set; }
+        public int CurrentProgress { get; set; }
+
+        private Bitmap _qrCodeCache;
+
+        public MainForm(Screen screen, bool isPrimary)
+        {
+            IsPrimaryScreen = isPrimary;
+            DoubleBuffered = true;
+            Rectangle bounds = screen.Bounds;
+            StartPosition = FormStartPosition.Manual;
+            Bounds = bounds;
+
+            ScreenCapture = new Bitmap(bounds.Width, bounds.Height);
+            using (Graphics g = Graphics.FromImage(ScreenCapture))
+            {
+                g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
+            }
+
+            FormBorderStyle = FormBorderStyle.None;
+            TopMost = true;
+            ShowInTaskbar = false;
+            KeyPreview = true;
+            Cursor = Cursors.WaitCursor;
         }
 
-        private void Timer_Tick(object sender, EventArgs e)
+        // === Rendering ===
+
+        protected override void OnPaintBackground(PaintEventArgs e)
         {
-            if (timer != null)
+            if (ScreenCapture != null)
             {
-                timer.Stop();
-            }
-
-            string wavPath = Environment.ExpandEnvironmentVariables(@"%SystemRoot%\Media\Windows Hardware Remove.wav");
-            if (System.IO.File.Exists(wavPath))
-            {
-                using (System.Media.SoundPlayer player = new System.Media.SoundPlayer(wavPath))
-                {
-                    player.PlaySync();
-                }
-            }
-
-            if (!isMuted)
-            {
-                isMuted = true;
-                try
-                {
-                    IMMDeviceEnumerator deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
-                    IMMDevice defaultDevice;
-                    deviceEnumerator.GetDefaultAudioEndpoint(0, 1, out defaultDevice);
-                    Guid iid = typeof(IAudioEndpointVolume).GUID;
-                    defaultDevice.Activate(ref iid, 1, IntPtr.Zero, out volume);
-                    volume.GetMute(out originalMuteState);
-                    volume.SetMute(true, Guid.Empty);
-                }
-                catch { }
-            }
-
-            foreach (Form form in Application.OpenForms)
-            {
-                MainForm mf = form as MainForm;
-                if (mf != null)
-                {
-                    mf.TriggerBsod();
-                }
-            }
-        }
-
-        public void TriggerBsod()
-        {
-            if (screenCapture != null)
-            {
-                screenCapture.Dispose();
-                screenCapture = null;
-            }
-            Cursor.Hide();
-
-            if (isPrimaryScreen)
-            {
-                this.BackColor = AppConfig.BackgroundColor;
-                langProvider = LanguageFactory.GetProvider(AppConfig.TargetLanguage);
-                showBsod = true;
-
-                progressTimer = new System.Windows.Forms.Timer();
-                progressTimer.Interval = AppConfig.ProgressIntervalMs;
-                progressTimer.Tick += ProgressTimer_Tick;
-                progressTimer.Start();
+                e.Graphics.DrawImage(ScreenCapture, ClientRectangle);
             }
             else
             {
-                this.BackColor = Color.Black;
+                using (SolidBrush brush = new SolidBrush(BackColor))
+                {
+                    e.Graphics.FillRectangle(brush, ClientRectangle);
+                }
             }
-
-            this.Invalidate();
         }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            if (!ShowBsod || LanguageProvider == null || !IsPrimaryScreen)
+                return;
+
+            int sw = ClientSize.Width;
+            int sh = ClientSize.Height;
+            float scale = sh / AppConfig.BaseHeight;
+            int leftMargin = (int)(sw * AppConfig.LeftMarginRatio);
+            int topMargin = (int)(sh * AppConfig.TopMarginRatio);
+
+            using (SolidBrush textBrush = new SolidBrush(AppConfig.TextColor))
+            {
+                using (Font sadFont = new Font("Segoe UI", 110f * scale))
+                {
+                    e.Graphics.DrawString(LanguageProvider.SadFace, sadFont, textBrush,
+                        leftMargin - (int)(15 * scale), topMargin);
+                }
+
+                using (Font mainFont = new Font(LanguageProvider.FontName, 24f * scale))
+                {
+                    e.Graphics.DrawString(LanguageProvider.MainText, mainFont, textBrush,
+                        leftMargin, (int)(sh * (AppConfig.TopMarginRatio + 0.28)));
+                    e.Graphics.DrawString(LanguageProvider.FormatProgress(CurrentProgress), mainFont, textBrush,
+                        leftMargin, (int)(sh * (AppConfig.TopMarginRatio + 0.41)));
+                }
+
+                int qrSize = (int)(116f * scale);
+                int qrY = (int)(sh * (AppConfig.TopMarginRatio + 0.50));
+
+                if (_qrCodeCache == null)
+                {
+                    _qrCodeCache = GenerateQRCode(qrSize);
+                }
+                e.Graphics.DrawImage(_qrCodeCache, leftMargin, qrY, qrSize, qrSize);
+
+                using (Font supportFont = new Font(LanguageProvider.FontName, 13f * scale))
+                {
+                    e.Graphics.DrawString(LanguageProvider.SupportText, supportFont, textBrush,
+                        leftMargin + qrSize + (int)(20 * scale), qrY);
+                }
+            }
+        }
+
+        // === QR Code Generation ===
 
         private Bitmap GenerateQRCode(int size)
         {
@@ -330,90 +286,7 @@ namespace FakeBSOD
             }
         }
 
-        private void ProgressTimer_Tick(object sender, EventArgs e)
-        {
-            Random rnd = new Random();
-            currentProgress += rnd.Next(AppConfig.ProgressMinIncrement, AppConfig.ProgressMaxIncrement + 1);
-            if (currentProgress >= 100)
-            {
-                currentProgress = 100;
-                progressTimer.Stop();
-
-                System.Windows.Forms.Timer exitTimer = new System.Windows.Forms.Timer();
-                exitTimer.Interval = AppConfig.ExitDelayMs;
-                exitTimer.Tick += ExitTimer_Tick;
-                exitTimer.Start();
-            }
-            this.Invalidate();
-        }
-
-        private void ExitTimer_Tick(object sender, EventArgs e)
-        {
-            System.Windows.Forms.Timer exitTimer = sender as System.Windows.Forms.Timer;
-            if (exitTimer != null)
-            {
-                exitTimer.Stop();
-            }
-            Cursor.Show();
-            Application.Exit();
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            if (screenCapture != null)
-            {
-                e.Graphics.DrawImage(screenCapture, ClientRectangle);
-            }
-            else
-            {
-                using (SolidBrush brush = new SolidBrush(this.BackColor))
-                {
-                    e.Graphics.FillRectangle(brush, ClientRectangle);
-                }
-            }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-
-            if (showBsod && langProvider != null && isPrimaryScreen)
-            {
-                int sw = this.ClientSize.Width;
-                int sh = this.ClientSize.Height;
-                float scale = sh / AppConfig.BaseHeight;
-                int leftMargin = (int)(sw * AppConfig.LeftMarginRatio);
-                int topMargin = (int)(sh * AppConfig.TopMarginRatio);
-
-                using (SolidBrush textBrush = new SolidBrush(AppConfig.TextColor))
-                {
-                    using (Font sadFont = new Font("Segoe UI", 110f * scale))
-                    {
-                        e.Graphics.DrawString(langProvider.SadFace, sadFont, textBrush, leftMargin - (int)(15 * scale), topMargin);
-                    }
-
-                    using (Font mainFont = new Font(langProvider.FontName, 24f * scale))
-                    {
-                        e.Graphics.DrawString(langProvider.MainText, mainFont, textBrush, leftMargin, (int)(sh * (AppConfig.TopMarginRatio + 0.28)));
-                        e.Graphics.DrawString(langProvider.FormatProgress(currentProgress), mainFont, textBrush, leftMargin, (int)(sh * (AppConfig.TopMarginRatio + 0.41)));
-                    }
-
-                    int qrSize = (int)(116f * scale);
-                    int qrY = (int)(sh * (AppConfig.TopMarginRatio + 0.50));
-
-                    if (qrCodeCache == null)
-                    {
-                        qrCodeCache = GenerateQRCode(qrSize);
-                    }
-                    e.Graphics.DrawImage(qrCodeCache, leftMargin, qrY, qrSize, qrSize);
-
-                    using (Font supportFont = new Font(langProvider.FontName, 13f * scale))
-                    {
-                        e.Graphics.DrawString(langProvider.SupportText, supportFont, textBrush, leftMargin + qrSize + (int)(20 * scale), qrY);
-                    }
-                }
-            }
-        }
+        // === Behavior ===
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
@@ -426,9 +299,9 @@ namespace FakeBSOD
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            if (qrCodeCache != null)
+            if (_qrCodeCache != null)
             {
-                qrCodeCache.Dispose();
+                _qrCodeCache.Dispose();
             }
             base.OnFormClosed(e);
         }
@@ -441,6 +314,67 @@ namespace FakeBSOD
                 Application.Exit();
             }
             base.OnKeyDown(e);
+        }
+    }
+
+    // ========================================================================
+    // Entry Point
+    // ========================================================================
+
+    public static class Program
+    {
+        [STAThread]
+        public static void Main()
+        {
+            MainForm.SetProcessDPIAware();
+
+            var ctx = new ActionContext();
+
+            // === Phase 1: Pre-display (synchronous, before message loop) ===
+            ActionRunner.RunSync(new IAction[]
+            {
+                new DelayAction(AppConfig.InitialDelayMs),
+                new InstallKeyboardHookAction(),
+                new CreateFormsAction(),
+            }, ctx);
+
+            // === Phase 2: BSOD sequence (pipeline runs during message loop) ===
+            var pipeline = new ActionPipeline(ctx);
+
+            pipeline.Enqueue(new DelayAction(AppConfig.TimerIntervalMs));
+            pipeline.Enqueue(new PlaySystemSoundAction(@"%SystemRoot%\Media\Windows Hardware Remove.wav"));
+            pipeline.Enqueue(new MuteSystemAction());
+            pipeline.Enqueue(new ApplyToAllFormsAction(new DisposeScreenCaptureAction()));
+            pipeline.Enqueue(new ApplyToAllFormsAction(new ConditionalAction(
+                c => c.CurrentForm.IsPrimaryScreen,
+                new SequentialAction(
+                    new HideCursorAction(),
+                    new InitializeLanguageAction(),
+                    new SetFormBackgroundAction(AppConfig.BackgroundColor),
+                    new EnableBsodDisplayAction()
+                ),
+                new SetFormBackgroundAction(Color.Black)
+            )));
+            pipeline.Enqueue(new AnimateProgressAction(
+                AppConfig.ProgressIntervalMs,
+                AppConfig.ProgressMinIncrement,
+                AppConfig.ProgressMaxIncrement
+            ));
+            pipeline.Enqueue(new DelayAction(AppConfig.ExitDelayMs));
+            pipeline.Enqueue(new ShowCursorAction());
+            pipeline.Enqueue(new ExitApplicationAction());
+
+            pipeline.Start();
+
+            if (ctx.PrimaryForm != null)
+                Application.Run(ctx.PrimaryForm);
+
+            // === Phase 3: Cleanup (synchronous, after message loop) ===
+            ActionRunner.RunSync(new IAction[]
+            {
+                new UnmuteSystemAction(),
+                new RemoveKeyboardHookAction(),
+            }, ctx);
         }
     }
 }
