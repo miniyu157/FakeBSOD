@@ -11,8 +11,8 @@ namespace FakeBSOD
         public const double TopMarginRatio = 0.094074;
         public static readonly Color BackgroundColor = Color.FromArgb(0, 120, 215);
         public static readonly Color TextColor = Color.White;
-        public const int InitialDelayMs = 200;
-        public const int TimerIntervalMs = 800;
+        public const int InitialDelayMs = 2000;
+        public const int TimerIntervalMs = 8000;
         public const int ProgressIntervalMs = 3000;
         public const int ExitDelayMs = 3500;
         public const int ProgressMinIncrement = 4;
